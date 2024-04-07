@@ -1,0 +1,2 @@
+#define BLYNK_TEMPLATE_NAME "Pico W LVH"
+#define BLYNK_AUTH_TOKEN "xWiCZv9XrXWDFbbV4d2hP7ybjP3e9Svv"

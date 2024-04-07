@@ -1,0 +1,70 @@
+Lien vers la dernière version du firmeware :
+
+https://projects.raspberrypi.org/en/projects/get-started-pico-w/1
+
+Glisser déposer le fichier RPI_PICO_W-20240222-vx.xx.x.uf2 sur le pico W
+
+Il va redémarrer seul
+Ne rien toucher, seulement lancer Thony et voir la version qu'il utilise
+
+Dans Thonny, aller à "Gérer les paquets"
+
+Chercher et installer "picozero"
+
+Code fonctionnel :
+
+#---------------------------------------------------
+import network
+import socket
+from time import sleep
+from picozero import pico_temp_sensor, pico_led
+import machine
+
+# Pour afficher l'adresse mac
+import ubinascii
+
+ssid = 'CLARO1_F53E79'
+password = 'c024ZwRKpG'
+
+def connect():
+    #Connect to WLAN
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    wlan.connect(ssid, password)
+    while wlan.isconnected() == False:
+        print('Waiting for connection...')
+        sleep(1)
+    ip = wlan.ifconfig()[0]
+    print(f'Connected on {ip}')
+    mac = ubinascii.hexlify(network.WLAN().config('mac'),':').decode()
+    print("Adresse mac = ", mac)
+    return ip
+
+try:
+    ip = connect()
+except KeyboardInterrupt:
+    machine.reset()
+#---------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
