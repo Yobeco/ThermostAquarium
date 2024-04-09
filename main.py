@@ -35,7 +35,6 @@ import blynklib
 
 from config import BLYNK_KEY, WIFI_SSID_HOME, WIFI_PASSWORD_HOME, WIFI_SSID_SCHOOL, WIFI_PASSWORD_SCHOOL
 
-
 #---------------------------------------------------------------------
 # Connexion internet
 # --> Beklin
@@ -143,10 +142,8 @@ print('Found DS devices: ', roms)
 #---------------------------------------------------------------------
 # Connection à Blynk
 
-BLYNK_AUTH = BLYNK_KEY # Token d'authentification Blynk
-
-# base lib init
-blynk = blynklib.Blynk(BLYNK_AUTH)
+# Configuration
+blynk = blynklib.Blynk(BLYNK_KEY)
 
 # Effacer l'écran avant écriture
 oled.fill(0)
@@ -220,6 +217,8 @@ connexion_task = uasyncio.create_task(connexion_thread())
 
 def main():
     
+    # 1/0    # Erreur pout tester try / except
+    
     ds_sensor.convert_temp()
     time.sleep_ms(750)
 
@@ -280,8 +279,6 @@ while True:
         main()
     except Exception as e:
         print(f"Une erreur est survenue : {e}")
-        sys.exit()             # Redémarrer le script
-        # machine.reset()      # Redémarrer complètement le Pico
 
 
 
