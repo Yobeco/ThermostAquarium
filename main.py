@@ -4,7 +4,7 @@
 # Essayer Grafana ?
 
 # Version :
-# 12- Externaliser les variables sensibles
+# 13- Création d'un fichier de log des erreurs 
 
 # Affichage sur l'écran OLED I2C ssd1306 
 from machine import Pin, I2C
@@ -101,8 +101,8 @@ def connect():
         # Clear the oled display in case it has junk on it.
         oled.fill(0)
         # Afficher que la connexion est en attente
-        oled.text("   En cours",10,8)
-        oled.text("de connexion",6,18)
+        oled.text("  En cours",10,8)
+        oled.text(" de connexion",6,18)
         oled.text("  ...",30,28)
         oled.show()
         sleep(1)
@@ -279,6 +279,11 @@ while True:
         main()
     except Exception as e:
         print(f"Une erreur est survenue : {e}")
+        # Ajouter la dernière exception au fichier de log
+        with open('error_log.txt', 'a') as f:
+            f.write(f'Erreur : {e}\n')
+        time.sleep_ms(3000)         # Attendre 3s avant de recommencer main()
+
 
 
 
