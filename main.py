@@ -4,7 +4,7 @@
 # Essayer Grafana ?
 
 # Version :
-# 13- Création d'un fichier de log des erreurs 
+# 14- Enregistrement des messages d'erreurs
 
 # Affichage sur l'écran OLED I2C ssd1306 
 from machine import Pin, I2C
@@ -26,6 +26,12 @@ import uasyncio
 # Gérer la boucle
 from time import sleep
 import time
+
+#---------------------------------------------------------------------
+# Aide la gestion des erreurs 
+import sys
+import io
+
 #---------------------------------------------------------------------
 # Bibliothèque Blynk
 import blynklib
@@ -202,6 +208,9 @@ def connexion_thread():
     while True:
         if not wlan.isconnected():
             print("Tentative de reconnexion...")
+            # Ajouter l'événement au fichier de log
+            with open('error.log', 'a') as f:
+                f.write(f'Internet interrompu\n\n')
             connexLED.on()
             connect()
         else:
@@ -209,8 +218,8 @@ def connexion_thread():
             connexLED.off()
         await uasyncio.sleep(10)  # Attendre 10 secondes avant la prochaine vérification
 
-# Démarrer le thread
 connexion_task = uasyncio.create_task(connexion_thread())
+
 
 #---------------------------------------------------------------------
 # Fonction à lancer dans la boucle principale
@@ -280,8 +289,13 @@ while True:
     except Exception as e:
         print(f"Une erreur est survenue : {e}")
         # Ajouter la dernière exception au fichier de log
-        with open('error_log.txt', 'a') as f:
-            f.write(f'Erreur : {e}\n')
+        # Rediriger la sortie standard vers une variable "output"
+        output = io.StringIO()
+        # Imprimer les informations sur l'exception dans "output"
+        sys.print_exception(e, output)
+        with open('error.log', 'a') as f:
+            f.write(output.getvalue())
+            f.write(f'--------------------\n')
         time.sleep_ms(3000)         # Attendre 3s avant de recommencer main()
 
 
