@@ -3,6 +3,9 @@
 # Actuellement le contrôle se fait par Blynk
 # Essayer Grafana ?
 
+# Version :
+# 12- Externaliser les variables sensibles
+
 # Affichage sur l'écran OLED I2C ssd1306 
 from machine import Pin, I2C
 from ssd1306 import SSD1306_I2C
@@ -16,6 +19,8 @@ import socket
 from picozero import pico_temp_sensor, pico_led
 # Pour afficher l'adresse mac
 import ubinascii
+# Pour lancer un thread séparé pour vérifier la connexion
+import uasyncio
 
 #---------------------------------------------------------------------
 # Gérer la boucle
@@ -26,13 +31,19 @@ import time
 import blynklib
 
 #---------------------------------------------------------------------
+# Variables sensibles dans config.py (dans la iste .gitignore)
+
+from config import BLYNK_KEY, WIFI_SSID_HOME, WIFI_PASSWORD_HOME, WIFI_SSID_SCHOOL, WIFI_PASSWORD_SCHOOL
+
+
+#---------------------------------------------------------------------
 # Connexion internet
 # --> Beklin
-ssid = 'xxxxxxxxxxxxxxxxx'
-password = 'xxxxxxxxxxxxxxxxxx'
+ssid = WIFI_SSID_HOME
+password = WIFI_PASSWORD_HOME
 # --> École 
-# ssid = 'xxxxxxxxxxxxxxxxxxxxxx'
-# password = 'xxxxxxxxxxxx'
+# ssid = WIFI_SSID_SCHOOL
+# password = WIFI_PASSWORD_SCHOOL
 #---------------------------------------------------------------------
 # Allumer LED du Pico  --> Alimenté
 led = machine.Pin("LED", machine.Pin.OUT)
@@ -76,42 +87,45 @@ oled = SSD1306_I2C(WIDTH, HEIGHT, i2c)                  # Initialisation de l'é
 #---------------------------------------------------------------------
 # Connection internet
 
+wlan = None
+
 def connect():
+    
+    global wlan
     #Connect to WLAN
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     wlan.connect(ssid, password)
     while wlan.isconnected() == False:
-        print('Waiting for connection...')
+        print('Connexion en cours...')
         connexLED.on()
         # Clear the oled display in case it has junk on it.
         oled.fill(0)
         # Afficher que la connexion est en attente
-        oled.text("   Waiting",10,8)
-        oled.text("for connection",5,18)
+        oled.text("   En cours",10,8)
+        oled.text("de connexion",6,18)
         oled.text("  ...",30,28)
         oled.show()
         sleep(1)
+        
     ip = wlan.ifconfig()[0]
     connexLED.off()
-    print(f'Connected on {ip}')
+    print(f'Connecté à l\'ip : {ip}')
     mac = ubinascii.hexlify(network.WLAN().config('mac'),':').decode()
     print("Adresse mac = ", mac)
     
     # Clear the oled display in case it has junk on it.
     oled.fill(0)
     # Add some text
-    oled.text("Connected !",12,8)
+    oled.text("Connected !",15,8)
     oled.text(ip,0,20)
     oled.text(mac,0,30)
-    
     # Finally update the oled display so the image & text is displayed
     oled.show()
-    
     return ip
 
 try:
-    ip = connect()
+    connect()
 except KeyboardInterrupt:
     machine.reset()
     
@@ -129,14 +143,16 @@ print('Found DS devices: ', roms)
 #---------------------------------------------------------------------
 # Connection à Blynk
 
-BLYNK_AUTH = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx' #insert your Auth Token here
+BLYNK_AUTH = BLYNK_KEY # Token d'authentification Blynk
+
 # base lib init
 blynk = blynklib.Blynk(BLYNK_AUTH)
-# Clear the oled display in case it has junk on it.
+
+# Effacer l'écran avant écriture
 oled.fill(0)
-# Add some text
+# Configurer le texte de confirmation la connexion à blynk
 oled.text("Blynk OK !",30,50)
-# Finally update the oled display so the image & text is displayed
+# Afficher
 oled.show()
 
 #---------------------------------------------------------------------
@@ -182,19 +198,28 @@ def v1_write_handler(value):    # Lire la valeur
     else:
         relais(1)            # Allumer le relais
 
+
+# Lancement d'un thread séparé pour vérifier la connexion
+def connexion_thread():
+    global wlan
+    while True:
+        if not wlan.isconnected():
+            print("Tentative de reconnexion...")
+            connexLED.on()
+            connect()
+        else:
+            print("Connected !")
+            connexLED.off()
+        await uasyncio.sleep(10)  # Attendre 10 secondes avant la prochaine vérification
+
+# Démarrer le thread
+connexion_task = uasyncio.create_task(connexion_thread())
+
 #---------------------------------------------------------------------
-# Boucle principale
+# Fonction à lancer dans la boucle principale
 
-while True:
-
-    # Relancer la connexion si déconnecté ?
-#     if not wlan.isconnected() :
-#         connexLED.on()
-#         ip = connect()
-# 
-#     else :
-#         connexLED.off()
-
+def main():
+    
     ds_sensor.convert_temp()
     time.sleep_ms(750)
 
@@ -239,17 +264,25 @@ while True:
         envoyer_seuil_a_blynk()
         
         # Actualise l'affichage
-        # oled.show()
-        
-        # Avec gestion des erreurs de communication I2C
-        try:
-            oled.show()
-        except OSError as e:
-            machine.reset()
+        oled.show()
                 
         dataSentLED.off()
         # Attendre x ms avant la prochaine mesure
         time.sleep_ms(1000)  # Instable à 500ms
+
+#---------------------------------------------------------------------
+# Boucle principale
+
+while True:
+    
+    # Essayer de lance la fonction principale
+    try:
+        main()
+    except Exception as e:
+        print(f"Une erreur est survenue : {e}")
+        sys.exit()             # Redémarrer le script
+        # machine.reset()      # Redémarrer complètement le Pico
+
 
 
 
