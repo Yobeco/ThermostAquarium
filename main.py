@@ -4,7 +4,7 @@
 # Essayer Grafana ?
 
 # Version :
-# 14- Enregistrement des messages d'erreurs
+# 15- Vérifier connexion sur autre thread 
 
 # Affichage sur l'écran OLED I2C ssd1306 
 from machine import Pin, I2C
@@ -19,12 +19,13 @@ import socket
 from picozero import pico_temp_sensor, pico_led
 # Pour afficher l'adresse mac
 import ubinascii
-# Pour lancer un thread séparé pour vérifier la connexion
-import uasyncio
+
+#---------------------------------------------------------------------
+# Vérifier Connexion internet sur autre Thread
+import _thread
 
 #---------------------------------------------------------------------
 # Gérer la boucle
-from time import sleep
 import time
 
 #---------------------------------------------------------------------
@@ -89,29 +90,42 @@ HEIGHT = 64                                             # Configuration de la ha
 
 oled = SSD1306_I2C(WIDTH, HEIGHT, i2c)                  # Initialisation de l'écran OLED
 
+
 #---------------------------------------------------------------------
 # Connection internet
 
 wlan = None
 
 def connect():
-    
+
     global wlan
-    #Connect to WLAN
-    wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
+    
+    wlan = network.WLAN(network.STA_IF)     # Initialisation du module WLAN en mode station (STA_IF), pour se connecter à un réseau Wi-Fi existant
+    wlan.active(True)                       # Activation de l'interface WLAN
+    
     wlan.connect(ssid, password)
+    
+    a = 0      # Compteur de tentatives de connexions au Wifi
+    
     while wlan.isconnected() == False:
+        a = a + 1
         print('Connexion en cours...')
+        print(f"Essai n°{a}")
         connexLED.on()
         # Clear the oled display in case it has junk on it.
         oled.fill(0)
         # Afficher que la connexion est en attente
-        oled.text("  En cours",10,8)
-        oled.text(" de connexion",6,18)
-        oled.text("  ...",30,28)
+        oled.text("   Connexion",0,7)
+        oled.text("    en cours", 0,20)
+        oled.text("      ...",0,30)
+        oled.text(f"   Essai n^{a}",0,45)
         oled.show()
-        sleep(1)
+        
+        if a >= 5:
+            machine.reset()
+        
+        time.sleep_ms(10000 * a)       # Attendre 10s, puis 20s... s'il y la connexion n'a pas réussi
+        # Redémarrage du Pico si pas de connexion internet au bout de 1 min 30 (10 + 20 + 30 + 40 + 50s)
         
     ip = wlan.ifconfig()[0]
     connexLED.off()
@@ -210,15 +224,17 @@ def connexion_thread():
             print("Tentative de reconnexion...")
             # Ajouter l'événement au fichier de log
             with open('error.log', 'a') as f:
-                f.write(f'Internet interrompu\n\n')
+                f.write(f'Internet interrompu !\n\n')
             connexLED.on()
-            connect()
+            connect()          # 5 tentatives de reconnexion en 1 min 30
         else:
-            print("Connected !")
+            print("Connexion ok")
             connexLED.off()
-        await uasyncio.sleep(10)  # Attendre 10 secondes avant la prochaine vérification
+        
+        time.sleep_ms(60000) # Attendre 60 secondes avant la prochaine vérification
 
-connexion_task = uasyncio.create_task(connexion_thread())
+# Lancer connexion_thread() sur un second Thread
+second_thread = _thread.start_new_thread(connexion_thread, ())
 
 
 #---------------------------------------------------------------------
@@ -228,7 +244,9 @@ def main():
     
     # 1/0    # Erreur pout tester try / except
     
+    # Créer un objet ds_sensor de réception des données du DS1820
     ds_sensor.convert_temp()
+    
     time.sleep_ms(750)
 
     for rom in roms:
@@ -246,21 +264,29 @@ def main():
         oled.text("^C",75,30)
         oled.text(f"Temp max = {tempSeuil} ^C.",0,45)
         
-        # Envoyer la température mesurée à Blynk
-        blynk.virtual_write(0, temp)
+        # Envoyer la température mesurée à Blynk si la connexion est établie
+        if wlan.isconnected():        # Éviter les messages d'erreurs en cas de déconnexion internet
+            blynk.virtual_write(0, temp)
         
         if temp >= tempSeuil :
+            # Activer le relais
             relais(1)
-            # Changer l'état du switch et de la LED
-            blynk.virtual_write(1, 1)
-            blynk.virtual_write(3, 1)
-        else :
-            relais(0)
-            # Changer l'état du switch et de la LED
-            blynk.virtual_write(1, 0)
-            blynk.virtual_write(3, 0)
             
-        blynk.run()
+            # Changer l'état du switch et de la LED sur Blynk si la connexion est établie
+            if wlan.isconnected():
+                blynk.virtual_write(1, 1)
+                blynk.virtual_write(3, 1)
+        else :
+            # Éteindre le relais
+            relais(0)
+            
+            # Changer l'état du switch et de la LED si la connexion est établie
+            if wlan.isconnected():
+                blynk.virtual_write(1, 0)
+                blynk.virtual_write(3, 0)
+        
+        if wlan.isconnected():
+            blynk.run()
         
         
         # Faire clignotter la LED à chaque mesure envoyée
@@ -269,12 +295,12 @@ def main():
         dataSentLED.off()
 
         # Actualiser la valeur de tempSeuil de Blynk
-        envoyer_seuil_a_blynk()
+        if wlan.isconnected():
+            envoyer_seuil_a_blynk()
         
-        # Actualise l'affichage
+        # Actualise l'affichage de l'OLED
         oled.show()
                 
-        dataSentLED.off()
         # Attendre x ms avant la prochaine mesure
         time.sleep_ms(1000)  # Instable à 500ms
 
@@ -298,8 +324,3 @@ while True:
             f.write(f'--------------------\n')
         time.sleep_ms(3000)         # Attendre 3s avant de recommencer main()
 
-
-
-
-
-        
