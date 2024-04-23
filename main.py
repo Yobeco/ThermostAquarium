@@ -4,7 +4,7 @@
 # Essayer Grafana ?
 
 # Version :
-# 17- Reconnexion à internet en cas de coupure - 2
+# 17- Reconnexion à internet en cas de coupure - 3
 
 # Affichage sur l'écran OLED I2C ssd1306 
 from machine import Pin, I2C
@@ -150,6 +150,9 @@ try:
     connect()
     
 except Exception as e:
+    
+    connexLED.off()
+    
     print(f"--> Erreur de connexion à internet : {e}")
     # Ajouter la dernière exception au fichier de log
     # Rediriger la sortie standard vers une variable "output"
@@ -192,6 +195,15 @@ try:
     blynk = blynklib.Blynk(BLYNK_KEY)
     
 except Exception as e:
+    
+    for _ in range(10):
+        connexLED.on()
+        time.sleep(0.1)
+        connexLED.off()
+        time.sleep(0.1)
+    
+    connexLED.on()
+    
     print(f"--> Erreur de connexion à Blynk : {e}")
     # Ajouter la dernière exception au fichier de log
     # Rediriger la sortie standard vers une variable "output"
@@ -214,7 +226,7 @@ except Exception as e:
     time.sleep(120)         # Attendre 120s avant de redémarrer
     machine.reset()
 
-
+connexLED.off()
 # Effacer l'écran avant écriture
 oled.fill(0)
 # Configurer le texte de confirmation la connexion à blynk
@@ -252,7 +264,6 @@ blynk.on(2, slider_callback)
 
 # Fonction pour envoyer la valeur de la variable à Blynk
 def envoyer_seuil_a_blynk():
-    
     blynk.virtual_write(2, tempSeuil)  # Numéro du pin virtuel pour afficher la valeur dans Blynk
 
 #---------------------------------------------------------------------
@@ -276,7 +287,9 @@ def connexion_thread():
             # Ajouter l'événement au fichier de log
             with open('error.log', 'a') as f:
                 f.write(f'Internet interrompu !\n\n')
+                
             connexLED.on()
+            
             oled.fill(0)
             oled.text("  Pas de Wifi",0,8)
             oled.text("Reinitialisation",0,20)
@@ -286,7 +299,7 @@ def connexion_thread():
             time.sleep(120)          # Attendre 2 min avant reset
             machine.reset()
         else:
-            print("Reconnexion ok !")
+            print("Connexion ok !")
             connexLED.off()
         
         time.sleep(120) # Attendre 120 secondes avant la prochaine vérification
@@ -299,8 +312,6 @@ second_thread = _thread.start_new_thread(connexion_thread, ())
 # Fonction à lancer dans la boucle principale
 
 def main():
-    global wlan
-    if wlan.isconnected():
     # 1/0    # Erreur pout tester try / except
     
     # Instancier l'objet "ds_sensor" de réception des données du DS1820
@@ -324,7 +335,10 @@ def main():
         
         # Si la connexion est établie --> envoyer la température mesurée à Blynk
         if wlan.isconnected():        # Éviter les messages d'erreurs en cas de déconnexion internet
-            blynk.virtual_write(0, temp)
+            try:
+                blynk.virtual_write(0, temp)
+            except Exception as e:
+                print(f"--> Erreur de connexion à Blynk : {e}")
         
         # Mettre un PID !!!
         if temp >= tempSeuil :
@@ -334,8 +348,11 @@ def main():
             # Actualiser l'état du switch et de la LED sur Blynk
             # seulement si la connexion est établie
             if wlan.isconnected():
-                blynk.virtual_write(1, 1)
-                blynk.virtual_write(3, 1)
+                try:
+                    blynk.virtual_write(1, 1)
+                    blynk.virtual_write(3, 1)
+                except Exception as e:
+                    print(f"--> Erreur de connexion à Blynk : {e}")
         else :
             # Éteindre le relais
             relais(0)
@@ -343,21 +360,31 @@ def main():
             # Actualiser l'état du switch et de la LED sur Blynk
             # seulement si la connexion est établie
             if wlan.isconnected():
-                blynk.virtual_write(1, 0)
-                blynk.virtual_write(3, 0)
+                try :
+                    blynk.virtual_write(1, 0)
+                    blynk.virtual_write(3, 0)
+                except Exception as e:
+                    print(f"--> Erreur de connexion à Blynk : {e}")
         
         # Envoyer les infos à Blynk
         # seulement si la connexion est établie
         if wlan.isconnected():
-            blynk.run()
+            try:
+                blynk.run()
+            except Exception as e:
+                print(f"--> Erreur de connexion à Blynk : {e}")
         
         # Faire clignotter la LED à chaque mesure envoyée
         # si la connexion est établie
         if wlan.isconnected():
+            connexLED.off()
+            
             dataSentLED.on()
             time.sleep_ms(300)
             dataSentLED.off()
         else :                     # Si non connecté : clignoter
+            connexLED.on()
+            
             for _ in range(4):
                 dataSentLED.on()
                 time.sleep_ms(50)
@@ -367,8 +394,11 @@ def main():
         # Actualiser la valeur de tempSeuil de Blynk
         # seulement si la connexion est établie
         if wlan.isconnected():
-            envoyer_seuil_a_blynk()
-        
+            try:
+                envoyer_seuil_a_blynk()
+            except Exception as e:
+                print(f"--> Erreur de connexion à Blynk : {e}")
+                
         # Actualise l'affichage de l'OLED
         oled.show()
                 
@@ -383,6 +413,7 @@ while True:
     # Essayer de lance la fonction principale
     try:
         main()
+        
     except Exception as e:
         print(f"--> Erreur dans main() : {e}")
         # Ajouter la dernière exception au fichier de log
